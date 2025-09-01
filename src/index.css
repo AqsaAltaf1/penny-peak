@@ -8,35 +8,69 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Neumorphism Design System */
+    --background: 218 23% 95%;
+    --foreground: 220 39% 18%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card: 218 23% 95%;
+    --card-foreground: 220 39% 18%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover: 218 23% 97%;
+    --popover-foreground: 220 39% 18%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Soft Blue */
+    --primary: 217 91% 60%;
+    --primary-foreground: 220 14% 96%;
+    --primary-glow: 217 91% 70%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Soft Gray */
+    --secondary: 220 14% 89%;
+    --secondary-foreground: 220 39% 18%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted - Light Gray */
+    --muted: 220 14% 92%;
+    --muted-foreground: 220 39% 46%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Soft Teal */
+    --accent: 174 62% 47%;
+    --accent-foreground: 220 14% 96%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Success - Soft Green */
+    --success: 142 76% 36%;
+    --success-foreground: 220 14% 96%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Warning - Soft Orange */
+    --warning: 38 92% 50%;
+    --warning-foreground: 220 39% 18%;
 
-    --radius: 0.5rem;
+    /* Destructive - Soft Red */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 220 14% 96%;
+
+    /* Neumorphic Elements */
+    --neomorph-base: 218 23% 95%;
+    --neomorph-light: 218 23% 98%;
+    --neomorph-dark: 218 23% 88%;
+    
+    --border: 220 14% 89%;
+    --input: 218 23% 95%;
+    --ring: 217 91% 60%;
+
+    --radius: 1rem;
+
+    /* Shadows for Neumorphism */
+    --shadow-raised: 6px 6px 12px hsl(218 23% 88%), -6px -6px 12px hsl(218 23% 98%);
+    --shadow-inset: inset 4px 4px 8px hsl(218 23% 88%), inset -4px -4px 8px hsl(218 23% 98%);
+    --shadow-soft: 2px 2px 6px hsl(218 23% 88%), -2px -2px 6px hsl(218 23% 98%);
+    
+    /* Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-glow)));
+    --gradient-success: linear-gradient(135deg, hsl(var(--success)), hsl(142 76% 46%));
+    --gradient-warning: linear-gradient(135deg, hsl(var(--warning)), hsl(38 92% 60%));
+    --gradient-neomorph: linear-gradient(145deg, hsl(var(--neomorph-light)), hsl(var(--neomorph-base)));
+
+    /* Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     --sidebar-background: 0 0% 98%;
 
@@ -101,5 +135,55 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  /* Neumorphic Utilities */
+  .neomorph-raised {
+    background: hsl(var(--neomorph-base));
+    box-shadow: var(--shadow-raised);
+    border: 1px solid transparent;
+  }
+  
+  .neomorph-inset {
+    background: hsl(var(--neomorph-base));
+    box-shadow: var(--shadow-inset);
+    border: 1px solid transparent;
+  }
+  
+  .neomorph-soft {
+    background: hsl(var(--neomorph-base));
+    box-shadow: var(--shadow-soft);
+    border: 1px solid transparent;
+  }
+  
+  .neomorph-button {
+    background: var(--gradient-neomorph);
+    box-shadow: var(--shadow-raised);
+    border: 1px solid transparent;
+    transition: var(--transition-smooth);
+  }
+  
+  .neomorph-button:hover {
+    box-shadow: var(--shadow-soft);
+    transform: translateY(1px);
+  }
+  
+  .neomorph-button:active {
+    box-shadow: var(--shadow-inset);
+    transform: translateY(2px);
+  }
+  
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+  
+  .gradient-success {
+    background: var(--gradient-success);
+  }
+  
+  .gradient-warning {
+    background: var(--gradient-warning);
   }
 }
