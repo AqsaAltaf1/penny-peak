@@ -1,45 +1,80 @@
+import { useState } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Target, Plus } from "lucide-react";
-
-interface SavingsGoal {
-  id: string;
-  title: string;
-  target: number;
-  current: number;
-  deadline: string;
-  color: string;
-}
-
-const savingsGoals: SavingsGoal[] = [
-  {
-    id: "1",
-    title: "Emergency Fund",
-    target: 10000,
-    current: 6500,
-    deadline: "Dec 2024",
-    color: "hsl(var(--primary))"
-  },
-  {
-    id: "2", 
-    title: "Vacation Fund",
-    target: 3000,
-    current: 1200,
-    deadline: "Jun 2024",
-    color: "hsl(var(--accent))"
-  },
-  {
-    id: "3",
-    title: "New Car",
-    target: 25000,
-    current: 8500,
-    deadline: "Mar 2025", 
-    color: "hsl(var(--success))"
-  }
-];
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useApp } from "@/contexts/AppContext";
+import { Target, Plus, Edit, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 export function SavingsGoals() {
+  const { savingsGoals, addSavingsGoal, updateSavingsGoal, deleteSavingsGoal } = useApp();
+  const [isAddingGoal, setIsAddingGoal] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<string | null>(null);
+  const [goalForm, setGoalForm] = useState({
+    title: "",
+    target: "",
+    current: "",
+    deadline: "",
+    color: "hsl(var(--primary))",
+  });
+
+  const handleAddGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      addSavingsGoal({
+        title: goalForm.title,
+        target: parseFloat(goalForm.target),
+        current: parseFloat(goalForm.current) || 0,
+        deadline: goalForm.deadline,
+        color: goalForm.color,
+      });
+      setIsAddingGoal(false);
+      setGoalForm({ title: "", target: "", current: "", deadline: "", color: "hsl(var(--primary))" });
+      toast.success("Savings goal added successfully!");
+    } catch (error) {
+      toast.error("Failed to add savings goal");
+    }
+  };
+
+  const handleUpdateGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingGoal) return;
+    
+    try {
+      updateSavingsGoal(editingGoal, {
+        title: goalForm.title,
+        target: parseFloat(goalForm.target),
+        current: parseFloat(goalForm.current),
+        deadline: goalForm.deadline,
+        color: goalForm.color,
+      });
+      setEditingGoal(null);
+      setGoalForm({ title: "", target: "", current: "", deadline: "", color: "hsl(var(--primary))" });
+      toast.success("Savings goal updated successfully!");
+    } catch (error) {
+      toast.error("Failed to update savings goal");
+    }
+  };
+
+  const handleDeleteGoal = (id: string) => {
+    deleteSavingsGoal(id);
+    toast.success("Savings goal deleted successfully!");
+  };
+
+  const openEditDialog = (goal: any) => {
+    setGoalForm({
+      title: goal.title,
+      target: goal.target.toString(),
+      current: goal.current.toString(),
+      deadline: goal.deadline,
+      color: goal.color,
+    });
+    setEditingGoal(goal.id);
+  };
+
   return (
     <Card className="neomorph-raised border-0 shadow-none">
       <CardHeader className="pb-4">
@@ -50,17 +85,79 @@ export function SavingsGoals() {
             </div>
             Savings Goals
           </div>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            className="neomorph-button border-0 h-8 w-8 p-0"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
+          <Dialog open={isAddingGoal} onOpenChange={setIsAddingGoal}>
+            <DialogTrigger asChild>
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="neomorph-button border-0 h-8 w-8 p-0"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="neomorph-raised border-0">
+              <DialogHeader>
+                <DialogTitle>Add New Savings Goal</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleAddGoal} className="space-y-4">
+                <div>
+                  <Label htmlFor="goal-title">Goal Title</Label>
+                  <Input
+                    id="goal-title"
+                    value={goalForm.title}
+                    onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })}
+                    placeholder="e.g., Emergency Fund"
+                    className="neomorph-inset border-0"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="goal-target">Target Amount</Label>
+                  <Input
+                    id="goal-target"
+                    type="number"
+                    step="0.01"
+                    value={goalForm.target}
+                    onChange={(e) => setGoalForm({ ...goalForm, target: e.target.value })}
+                    placeholder="10000"
+                    className="neomorph-inset border-0"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="goal-current">Current Amount</Label>
+                  <Input
+                    id="goal-current"
+                    type="number"
+                    step="0.01"
+                    value={goalForm.current}
+                    onChange={(e) => setGoalForm({ ...goalForm, current: e.target.value })}
+                    placeholder="0"
+                    className="neomorph-inset border-0"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="goal-deadline">Deadline</Label>
+                  <Input
+                    id="goal-deadline"
+                    type="date"
+                    value={goalForm.deadline}
+                    onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })}
+                    className="neomorph-inset border-0"
+                    required
+                  />
+                </div>
+                <Button type="submit" className="w-full neomorph-button border-0 gradient-primary text-primary-foreground">
+                  Add Goal
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
-        {savingsGoals.map((goal) => {
+        {savingsGoals.length > 0 ? (
+          savingsGoals.map((goal) => {
           const progress = (goal.current / goal.target) * 100;
           
           return (
@@ -68,15 +165,35 @@ export function SavingsGoals() {
               <div className="flex items-center justify-between">
                 <div>
                   <h4 className="font-medium text-foreground">{goal.title}</h4>
-                  <p className="text-sm text-muted-foreground">{goal.deadline}</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium text-foreground">
-                    ${goal.current.toLocaleString()}
-                  </p>
                   <p className="text-sm text-muted-foreground">
-                    of ${goal.target.toLocaleString()}
+                    {new Date(goal.deadline).toLocaleDateString()}
                   </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <p className="font-medium text-foreground">
+                      ${goal.current.toLocaleString()}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      of ${goal.target.toLocaleString()}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openEditDialog(goal)}
+                    className="h-8 w-8 p-0 neomorph-button border-0"
+                  >
+                    <Edit className="h-3 w-3" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteGoal(goal.id)}
+                    className="h-8 w-8 p-0 neomorph-button border-0"
+                  >
+                    <Trash2 className="h-3 w-3 text-destructive" />
+                  </Button>
                 </div>
               </div>
               
@@ -95,7 +212,88 @@ export function SavingsGoals() {
               </div>
             </div>
           );
-        })}
+        })
+        ) : (
+          <div className="text-center space-y-4 py-8">
+            <p className="text-muted-foreground">No savings goals yet</p>
+            <p className="text-sm text-muted-foreground">Create your first savings goal to start tracking progress</p>
+          </div>
+        )}
+
+        {/* Edit Goal Dialog */}
+        <Dialog open={editingGoal !== null} onOpenChange={(open) => !open && setEditingGoal(null)}>
+          <DialogContent className="neomorph-raised border-0">
+            <DialogHeader>
+              <DialogTitle>Edit Savings Goal</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleUpdateGoal} className="space-y-4">
+              <div>
+                <Label htmlFor="edit-goal-title">Goal Title</Label>
+                <Input
+                  id="edit-goal-title"
+                  value={goalForm.title}
+                  onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })}
+                  placeholder="e.g., Emergency Fund"
+                  className="neomorph-inset border-0"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-goal-target">Target Amount</Label>
+                <Input
+                  id="edit-goal-target"
+                  type="number"
+                  step="0.01"
+                  value={goalForm.target}
+                  onChange={(e) => setGoalForm({ ...goalForm, target: e.target.value })}
+                  placeholder="10000"
+                  className="neomorph-inset border-0"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-goal-current">Current Amount</Label>
+                <Input
+                  id="edit-goal-current"
+                  type="number"
+                  step="0.01"
+                  value={goalForm.current}
+                  onChange={(e) => setGoalForm({ ...goalForm, current: e.target.value })}
+                  placeholder="0"
+                  className="neomorph-inset border-0"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-goal-deadline">Deadline</Label>
+                <Input
+                  id="edit-goal-deadline"
+                  type="date"
+                  value={goalForm.deadline}
+                  onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })}
+                  className="neomorph-inset border-0"
+                  required
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setEditingGoal(null)}
+                  className="flex-1 neomorph-button border-0"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  className="flex-1 neomorph-button border-0 gradient-primary text-primary-foreground"
+                >
+                  Update Goal
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

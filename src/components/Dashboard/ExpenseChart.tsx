@@ -1,14 +1,6 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const expenseData = [
-  { name: "Food & Dining", value: 890, color: "#ef4444" },
-  { name: "Transportation", value: 450, color: "#f97316" },
-  { name: "Shopping", value: 320, color: "#eab308" },
-  { name: "Entertainment", value: 280, color: "#22c55e" },
-  { name: "Bills & Utilities", value: 650, color: "#3b82f6" },
-  { name: "Other", value: 210, color: "#8b5cf6" },
-];
+import { analyticsService } from "@/services/dataService";
 
 const RADIAN = Math.PI / 180;
 const renderCustomizedLabel = ({
@@ -35,6 +27,7 @@ const renderCustomizedLabel = ({
 };
 
 export function ExpenseChart() {
+  const expenseData = analyticsService.getCategoryData('expense');
   const total = expenseData.reduce((sum, item) => sum + item.value, 0);
 
   return (
@@ -48,41 +41,50 @@ export function ExpenseChart() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={expenseData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={renderCustomizedLabel}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-                stroke="none"
-              >
-                {expenseData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip 
-                formatter={(value: number) => [`$${value}`, 'Amount']}
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--neomorph-base))',
-                  border: 'none',
-                  borderRadius: '12px',
-                  boxShadow: 'var(--shadow-raised)'
-                }}
-              />
-              <Legend 
-                verticalAlign="bottom" 
-                height={36}
-                formatter={(value) => <span className="text-sm">{value}</span>}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        {expenseData.length > 0 ? (
+          <div className="h-64 sm:h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={expenseData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={renderCustomizedLabel}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {expenseData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--neomorph-base))',
+                    border: 'none',
+                    borderRadius: '12px',
+                    boxShadow: 'var(--shadow-raised)'
+                  }}
+                />
+                <Legend 
+                  verticalAlign="bottom" 
+                  height={36}
+                  formatter={(value) => <span className="text-sm">{value}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="h-64 sm:h-80 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <p className="text-muted-foreground">No expense data available</p>
+              <p className="text-sm text-muted-foreground">Add some transactions to see the breakdown</p>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
