@@ -8,14 +8,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useApp } from "@/contexts/AppContext";
 import { authService } from "@/services/supabaseService";
-import { LogIn, UserPlus, DollarSign, Mail, Shield, Eye, EyeOff, Check, X } from "lucide-react";
+import { LogIn, UserPlus, DollarSign, Mail, Shield, Eye, EyeOff, Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export function AuthPage() {
-  const { login, register } = useApp();
+  const { login, register, registerWithOTP } = useApp();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [retryStatus, setRetryStatus] = useState("");
   
   // Password visibility states
   const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -67,13 +68,21 @@ export function AuthPage() {
   };
 
   const isOTPFormValid = () => {
-    return registerForm.name.trim() !== "" && registerForm.email.trim() !== "";
+    return (
+      registerForm.name.trim() !== "" &&
+      registerForm.email.trim() !== "" &&
+      registerForm.password.trim() !== "" &&
+      registerForm.confirmPassword.trim() !== "" &&
+      passwordValidation.isValid &&
+      registerForm.password === registerForm.confirmPassword
+    );
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+    setRetryStatus("");
 
     // Validate required fields
     if (!isLoginFormValid()) {
@@ -87,10 +96,11 @@ export function AuthPage() {
       if (!success) {
         setError("Invalid email or password");
       }
-    } catch {
-      setError("Login failed. Please try again.");
+    } catch (error) {
+      setError(error.message || "Login failed. Please try again.");
     } finally {
       setIsLoading(false);
+      setRetryStatus("");
     }
   };
 
@@ -98,6 +108,7 @@ export function AuthPage() {
     e.preventDefault();
     setIsLoading(true);
     setError("");
+    setRetryStatus("");
 
     // Validate required fields first
     if (!registerForm.name.trim()) {
@@ -137,12 +148,28 @@ export function AuthPage() {
     }
 
     try {
-      const success = await register(registerForm.email, registerForm.name, registerForm.password);
-      if (!success) {
-        setError("Registration failed. Please try again.");
+      const result = await register(registerForm.email, registerForm.name, registerForm.password);
+      if (result.success) {
+        if (result.needsConfirmation) {
+          setError(""); // Clear any previous errors
+          toast.success(result.message || "Please check your email to confirm your account");
+        } else {
+          toast.success("Registration successful!");
+        }
       }
-    } catch {
-      setError("Registration failed. Please try again.");
+    } catch (error) {
+      const errorMessage = error.message || "Registration failed. Please try again.";
+      if (errorMessage.includes('email service') || errorMessage.includes('confirmation email') || errorMessage.includes('Server configuration') || errorMessage.includes('not configured properly')) {
+        setError(`${errorMessage} 
+
+🎮 Click "Try Demo (No Signup)" below for instant access to the full app!`);
+      } else if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
+        setError(`${errorMessage} 
+
+🎮 Try the demo mode below for instant access!`);
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -153,7 +180,7 @@ export function AuthPage() {
     setIsLoading(true);
     setError("");
 
-    // Validate required fields for OTP signup
+    // Validate all required fields for OTP signup
     if (!registerForm.name.trim()) {
       setError("Full name is required");
       setIsLoading(false);
@@ -162,6 +189,30 @@ export function AuthPage() {
 
     if (!registerForm.email.trim()) {
       setError("Email is required");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!registerForm.password.trim()) {
+      setError("Password is required");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!registerForm.confirmPassword.trim()) {
+      setError("Please confirm your password");
+      setIsLoading(false);
+      return;
+    }
+
+    if (registerForm.password !== registerForm.confirmPassword) {
+      setError("Passwords do not match");
+      setIsLoading(false);
+      return;
+    }
+
+    if (!passwordValidation.isValid) {
+      setError("Password does not meet all requirements");
       setIsLoading(false);
       return;
     }
@@ -175,12 +226,24 @@ export function AuthPage() {
     }
 
     try {
-      await authService.signUpWithOTP(registerForm.email, registerForm.name);
-      toast.success('Verification code sent to your email!');
-      navigate(`/verify-email?email=${encodeURIComponent(registerForm.email)}`);
+      // Register with OTP - creates account with password and sends verification code
+      const result = await registerWithOTP(registerForm.email, registerForm.name, registerForm.password);
+      
+      if (result.success && result.needsConfirmation) {
+        toast.success('Verification code sent to your email!');
+        navigate(`/verify-email?email=${encodeURIComponent(registerForm.email)}`);
+      } else {
+        toast.success("Registration successful!");
+      }
     } catch (error: any) {
-      setError(error.message || 'Failed to send verification code');
-      toast.error('Failed to send verification code');
+      const errorMessage = error.message || 'Failed to send verification code';
+      if (errorMessage.includes('email service') || errorMessage.includes('confirmation email') || errorMessage.includes('Server configuration') || errorMessage.includes('not configured properly')) {
+        setError(`${errorMessage} \n\n🎮 Click "Try Demo (No Signup)" below for instant access to the full app!`);
+      } else if (errorMessage.includes('rate limit') || errorMessage.includes('Too many')) {
+        setError(`${errorMessage} \n\n🎮 Try the demo mode below for instant access!`);
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -191,9 +254,96 @@ export function AuthPage() {
     setError("");
     
     try {
-      await login("demo@example.com", "demo123");
-    } catch {
-      setError("Demo login failed");
+      // Create demo user in localStorage FIRST
+      const demoUser = {
+        id: 'demo-user-' + Date.now(),
+        email: 'demo@example.com', 
+        name: 'Demo User',
+        createdAt: new Date().toISOString()
+      };
+      
+      // Clear any existing data first
+      localStorage.removeItem('expense_tracker_transactions');
+      localStorage.removeItem('expense_tracker_savings_goals');
+      
+      // Set demo mode flag and user
+      localStorage.setItem('demo_mode', 'true');
+      localStorage.setItem('expense_tracker_user', JSON.stringify(demoUser));
+      
+      // Generate demo data directly here to ensure it works
+      const demoTransactions = [
+        {
+          id: 'demo-1',
+          userId: demoUser.id,
+          type: "expense",
+          amount: 45.80,
+          category: "Food & Dining",
+          description: "Lunch at downtown cafe",
+          date: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'demo-2', 
+          userId: demoUser.id,
+          type: "income",
+          amount: 2500.00,
+          category: "Salary",
+          description: "Monthly salary",
+          date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'demo-3',
+          userId: demoUser.id,
+          type: "expense",
+          amount: 89.99,
+          category: "Shopping", 
+          description: "Online purchase",
+          date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+          createdAt: new Date().toISOString()
+        }
+      ];
+      
+      const demoGoals = [
+        {
+          id: 'goal-1',
+          userId: demoUser.id,
+          title: "Emergency Fund",
+          target: 10000,
+          current: 6500,
+          deadline: "2024-12-31",
+          color: "hsl(var(--primary))",
+          createdAt: new Date().toISOString()
+        },
+        {
+          id: 'goal-2',
+          userId: demoUser.id,
+          title: "Vacation Fund",
+          target: 3000,
+          current: 1200,
+          deadline: "2024-06-30", 
+          color: "hsl(var(--accent))",
+          createdAt: new Date().toISOString()
+        }
+      ];
+      
+      // Store demo data directly
+      localStorage.setItem('expense_tracker_transactions', JSON.stringify(demoTransactions));
+      localStorage.setItem('expense_tracker_savings_goals', JSON.stringify(demoGoals));
+      
+      console.log('Demo data created:', { demoUser, demoTransactions, demoGoals });
+      
+      toast.success('Demo mode activated! Redirecting to dashboard...');
+      
+      // Small delay then redirect
+      setTimeout(() => {
+        window.location.reload();
+      }, 1000);
+      
+    } catch (error) {
+      setError("Demo mode failed to activate");
+      toast.error("Demo activation failed");
+      console.error('Demo error:', error);
     } finally {
       setIsLoading(false);
     }
@@ -285,6 +435,17 @@ export function AuthPage() {
                       </button>
                     </div>
                   </div>
+                  
+                  {retryStatus && (
+                    <Alert className="neomorph-inset border-0">
+                      <AlertDescription className="text-blue-600">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          {retryStatus}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                   
                   {error && (
                     <Alert className="neomorph-inset border-0">
@@ -463,6 +624,17 @@ export function AuthPage() {
                     )}
                   </div>
 
+                  {retryStatus && (
+                    <Alert className="neomorph-inset border-0">
+                      <AlertDescription className="text-blue-600">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          {retryStatus}
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
                   {error && (
                     <Alert className="neomorph-inset border-0">
                       <AlertDescription className="text-destructive">
@@ -471,34 +643,22 @@ export function AuthPage() {
                     </Alert>
                   )}
 
-                                  <div className="space-y-3">
-                  <Button 
-                    type="submit" 
-                    className="w-full neomorph-button border-0 gradient-primary text-primary-foreground"
-                    disabled={isLoading || !isRegisterFormValid()}
-                  >
-                    {isLoading ? "Creating account..." : "Create Account"}
-                  </Button>
-                  
-                  <div className="text-center text-xs text-muted-foreground">
-                    — OR —
-                  </div>
-                  
                   <Button
                     type="button"
                     onClick={handleOTPSignup}
-                    variant="outline"
-                    className="w-full neomorph-button border-0"
+                    className="w-full neomorph-button border-0 gradient-primary text-primary-foreground"
                     disabled={isLoading || !isOTPFormValid()}
                   >
                     <Shield className="h-4 w-4 mr-2" />
-                    Sign up with Email Code
+                    {isLoading ? "Creating account..." : "Register with 6-Digit Code"}
                   </Button>
                   
-                  <p className="text-xs text-muted-foreground text-center">
-                    Get a verification code instead of using a password
-                  </p>
-                </div>
+                  <div className="neomorph-inset p-3 rounded-lg mt-4">
+                    <p className="text-xs text-muted-foreground text-center">
+                      📧 You'll receive a <strong>6-digit verification code</strong> via email<br />
+                      🔐 After verification, you can login with your email & password
+                    </p>
+                  </div>
               </form>
             </CardContent>
           </TabsContent>
@@ -515,10 +675,10 @@ export function AuthPage() {
               <Button
                 onClick={handleDemoLogin}
                 variant="outline"
-                className="w-full neomorph-button border-0"
+                className="w-full neomorph-button border-0 hover:gradient-primary hover:text-primary-foreground transition-all duration-200"
                 disabled={isLoading}
               >
-                {isLoading ? "Loading..." : "Try Demo Account"}
+                {isLoading ? "Loading demo..." : "Try Demo (No Signup)"}
               </Button>
             </div>
           </CardContent>

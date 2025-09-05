@@ -14,6 +14,9 @@ const queryClient = new QueryClient();
 
 function AuthenticatedApp() {
   const { auth } = useApp();
+  
+  // Check if user is authenticated OR in demo mode
+  const isAuthorized = auth.isAuthenticated || localStorage.getItem('demo_mode') === 'true';
 
   return (
     <Routes>
@@ -22,8 +25,8 @@ function AuthenticatedApp() {
       <Route path="/auth/callback" element={<AuthCallback />} />
       <Route path="/verify-email" element={<VerifyEmail />} />
       
-      {/* Protected routes - require authentication */}
-      <Route path="/" element={auth.isAuthenticated ? <Index /> : <AuthPage />} />
+      {/* Protected routes - require authentication OR demo mode */}
+      <Route path="/" element={isAuthorized ? <Index /> : <AuthPage />} />
       
       {/* Catch-all route */}
       <Route path="*" element={<NotFound />} />

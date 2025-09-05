@@ -41,9 +41,14 @@ export function RecentTransactions() {
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, 10);
 
-  const handleDeleteTransaction = (id: string) => {
-    deleteTransaction(id);
-    toast.success("Transaction deleted successfully");
+  const handleDeleteTransaction = async (id: string) => {
+    try {
+      await deleteTransaction(id);
+      toast.success("Transaction deleted successfully");
+    } catch (error) {
+      toast.error("Failed to delete transaction");
+      console.error("Delete error:", error);
+    }
   };
 
   return (

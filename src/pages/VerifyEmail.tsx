@@ -5,13 +5,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { authService } from "@/services/supabaseService";
+import { useApp } from "@/contexts/AppContext";
 import { Mail, Shield, RefreshCw, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export function VerifyEmail() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { verifyOTP, resendOTP } = useApp();
   
   const email = searchParams.get('email') || '';
   const [verificationCode, setVerificationCode] = useState('');
@@ -40,9 +41,14 @@ export function VerifyEmail() {
     }
 
     try {
-      await authService.verifyOTP(email, verificationCode, 'email');
-      toast.success('Email verified successfully!');
-      navigate('/');
+      const result = await verifyOTP(email, verificationCode);
+      if (result.success) {
+        toast.success(result.message || 'Email verified successfully!');
+        navigate('/');
+      } else {
+        setError(result.message || 'Invalid verification code. Please try again.');
+        toast.error('Verification failed');
+      }
     } catch (error: any) {
       setError(error.message || 'Invalid verification code. Please try again.');
       toast.error('Verification failed');
@@ -56,9 +62,14 @@ export function VerifyEmail() {
     setError('');
 
     try {
-      await authService.resendOTP(email);
-      toast.success('New verification code sent!');
-      setCountdown(60); // 60 second cooldown
+      const result = await resendOTP(email);
+      if (result.success) {
+        toast.success(result.message || 'New verification code sent!');
+        setCountdown(60); // 60 second cooldown
+      } else {
+        setError(result.message || 'Failed to resend code. Please try again.');
+        toast.error('Failed to resend code');
+      }
     } catch (error: any) {
       setError(error.message || 'Failed to resend code. Please try again.');
       toast.error('Failed to resend code');
@@ -115,26 +126,15 @@ export function VerifyEmail() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* Option 1: Click Email Link */}
-            <div className="neomorph-inset p-4 rounded-lg space-y-2">
-              <h3 className="font-medium text-sm">Option 1: Click Email Link</h3>
-              <p className="text-xs text-muted-foreground">
-                Check your email and click the confirmation link we sent you.
-              </p>
-            </div>
-
-            <div className="text-center text-xs text-muted-foreground">
-              — OR —
-            </div>
+            
 
             {/* Option 2: Enter Code */}
             <div className="space-y-4">
-              <h3 className="font-medium text-sm">Option 2: Enter Verification Code</h3>
               
               <form onSubmit={handleVerifyCode} className="space-y-4">
                 <div>
                   <Label htmlFor="verification-code" className="text-sm font-medium mb-2 block">
-                    6-Digit Code
+                    Enter 6-Digit Code we send on your email
                   </Label>
                   <Input
                     id="verification-code"
@@ -215,3 +215,8 @@ export function VerifyEmail() {
     </div>
   );
 }
+
+
+
+
+

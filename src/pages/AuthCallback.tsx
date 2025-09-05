@@ -10,6 +10,7 @@ export function AuthCallback() {
   useEffect(() => {
     const handleAuthCallback = async () => {
       try {
+        // Handle the auth callback from the URL
         const { data, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -20,10 +21,32 @@ export function AuthCallback() {
 
         if (data.session) {
           // Successfully authenticated, redirect to dashboard
+          console.log('Authentication successful, redirecting...');
           setTimeout(() => navigate('/'), 2000);
         } else {
-          // No session found, redirect to auth page
-          setTimeout(() => navigate('/auth'), 3000);
+          // Try to get session from URL parameters for email confirmation
+          const urlParams = new URLSearchParams(window.location.search);
+          const accessToken = urlParams.get('access_token');
+          const refreshToken = urlParams.get('refresh_token');
+          
+          if (accessToken) {
+            console.log('Setting session from URL parameters...');
+            const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken || ''
+            });
+            
+            if (sessionError) {
+              console.error('Session error:', sessionError);
+              setTimeout(() => navigate('/auth?error=session_failed'), 3000);
+            } else {
+              console.log('Session set successfully, redirecting...');
+              setTimeout(() => navigate('/'), 2000);
+            }
+          } else {
+            // No session or tokens found, redirect to auth page
+            setTimeout(() => navigate('/auth'), 3000);
+          }
         }
       } catch (error) {
         console.error('Unexpected error:', error);

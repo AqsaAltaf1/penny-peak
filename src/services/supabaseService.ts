@@ -4,56 +4,146 @@ import { CATEGORY_COLORS } from '@/types';
 
 // Auth Service
 export const authService = {
-  // Sign up new user
-  signUp: async (email: string, password: string, fullName: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-        emailRedirectTo: `${window.location.origin}/auth/callback`
-      }
-    });
+  // Sign up new user with retry logic
+  signUp: async (email: string, password: string, fullName: string, retryCount = 0) => {
+    // Get the current origin and ensure it's the right port
+    const currentOrigin = window.location.origin;
+    const redirectUrl = `${currentOrigin}/auth/callback`;
+    console.log('Window location:', window.location.href);
+    console.log('Window origin:', currentOrigin);
+    console.log('Signup redirect URL:', redirectUrl);
+    
+    // Double check - if somehow we're getting the wrong port, force it
+    const finalRedirectUrl = redirectUrl.includes('localhost:8080') 
+      ? redirectUrl.replace('localhost:8080', 'localhost:8081')
+      : redirectUrl;
+    console.log('Final redirect URL:', finalRedirectUrl);
+    
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+          emailRedirectTo: finalRedirectUrl,
+        }
+      });
 
-    if (error) throw error;
-    return data;
+      if (error) throw error;
+      return data;
+      
+    } catch (error) {
+      console.error('Signup error:', error);
+      
+      // Handle rate limiting with exponential backoff
+      if ((error.message.includes('rate limit') || error.status === 429) && retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        console.log(`Rate limited, retrying in ${delay}ms (attempt ${retryCount + 1}/3)`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return authService.signUp(email, password, fullName, retryCount + 1);
+      }
+      
+      // Provide user-friendly error messages
+      if (error.message.includes('confirmation email') || error.message.includes('email service') || error.message.includes('Error sending confirmation email')) {
+        throw new Error('Email service is not configured properly. The redirect URL or SMTP settings need to be fixed in Supabase. Please use demo mode for now.');
+      } else if (error.message.includes('rate limit') || error.status === 429) {
+        throw new Error('Server is busy. Please try the demo mode for instant access, or wait a few minutes.');
+      } else if (error.message.includes('User already registered')) {
+        throw new Error('An account with this email already exists. Please try logging in instead.');
+      } else if (error.status === 500) {
+        throw new Error('Server configuration error. Please use demo mode while we fix the email setup.');
+      }
+      
+      throw error;
+    }
   },
 
-  // Sign up with OTP (sends verification code via email)
+  // Sign up with OTP (sends ONLY verification code via email, no password required)
   signUpWithOTP: async (email: string, fullName: string) => {
+    try {
+      // Method 1: Try magic link OTP (should send 6-digit code)
+      const { data, error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          data: {
+            full_name: fullName,
+          },
+          // No emailRedirectTo - we only want the OTP code, not a link
+        }
+      });
+
+      if (error) {
+        console.error('Magic link OTP failed, trying alternative method:', error);
+        
+        // Method 2: Fallback - create user first, then send OTP
+        const { data: signupData, error: signupError } = await supabase.auth.signUp({
+          email,
+          password: Math.random().toString(36).slice(-12), // Random temp password
+          options: {
+            data: {
+              full_name: fullName,
+            },
+            emailRedirectTo: undefined, // No redirect
+          }
+        });
+
+        if (signupError) throw signupError;
+        return signupData;
+      }
+
+      return data;
+    } catch (err) {
+      console.error('OTP signup failed:', err);
+      throw err;
+    }
+  },
+
+  // Verify OTP code - tries multiple types automatically
+  verifyOTP: async (email: string, token: string, type?: 'signup' | 'recovery' | 'email' | 'magiclink') => {
+    // If no type specified, try all possible types in order of likelihood
+    const typesToTry = type ? [type] : ['email', 'magiclink', 'signup', 'recovery'];
+    
+    let lastError = null;
+    
+    for (const otpType of typesToTry) {
+      try {
+        console.log(`Trying OTP verification with type: ${otpType}`);
+        const { data, error } = await supabase.auth.verifyOtp({
+          email,
+          token,
+          type: otpType as any
+        });
+
+        if (!error && data?.user) {
+          console.log(`OTP verification successful with type: ${otpType}`);
+          return data;
+        }
+        
+        if (error) {
+          console.log(`OTP verification failed with type ${otpType}:`, error.message);
+          lastError = error;
+        }
+      } catch (err) {
+        console.log(`Exception with type ${otpType}:`, err);
+        lastError = err;
+      }
+    }
+    
+    // If all types failed, throw the last error
+    throw lastError || new Error('OTP verification failed with all types');
+  },
+
+  // Resend OTP code for magic link
+  resendOTP: async (email: string) => {
+    // For magic link OTP, we need to send a new magic link
     const { data, error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        data: {
-          full_name: fullName,
-        },
-        emailRedirectTo: `${window.location.origin}/auth/callback`
+        shouldCreateUser: false, // Don't create if user doesn't exist
       }
-    });
-
-    if (error) throw error;
-    return data;
-  },
-
-  // Verify OTP code
-  verifyOTP: async (email: string, token: string, type: 'signup' | 'recovery' | 'email' = 'email') => {
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type
-    });
-
-    if (error) throw error;
-    return data;
-  },
-
-  // Resend OTP code
-  resendOTP: async (email: string) => {
-    const { data, error } = await supabase.auth.resend({
-      type: 'signup',
-      email
     });
 
     if (error) throw error;
@@ -73,15 +163,38 @@ export const authService = {
     return data;
   },
 
-  // Sign in user
-  signIn: async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  // Sign in user with retry logic
+  signIn: async (email: string, password: string, retryCount = 0) => {
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (error) throw error;
-    return data;
+      if (error) throw error;
+      return data;
+      
+    } catch (error) {
+      console.error('Signin error:', error);
+      
+      // Handle rate limiting with exponential backoff
+      if ((error.message.includes('rate limit') || error.status === 429) && retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        console.log(`Rate limited, retrying login in ${delay}ms (attempt ${retryCount + 1}/3)`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return authService.signIn(email, password, retryCount + 1);
+      }
+      
+      // Provide user-friendly error messages
+      if (error.message.includes('rate limit') || error.status === 429) {
+        throw new Error('Too many login attempts. Please try the demo mode for instant access.');
+      } else if (error.message.includes('Invalid login credentials')) {
+        throw new Error('Invalid email or password. Please check your credentials.');
+      }
+      
+      throw error;
+    }
   },
 
   // Sign out user
@@ -99,24 +212,28 @@ export const authService = {
 
   // Get current user
   getCurrentUser: async (): Promise<User | null> => {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error) throw error;
-    
-    if (!user) return null;
+    try {
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (error || !user) return null;
 
-    // Get profile data
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
+      // Get profile data
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .single();
 
-    return {
-      id: user.id,
-      email: user.email!,
-      name: profile?.full_name || user.user_metadata?.full_name || '',
-      createdAt: user.created_at,
-    };
+      return {
+        id: user.id,
+        email: user.email!,
+        name: profile?.full_name || user.user_metadata?.full_name || user.email!.split('@')[0],
+        createdAt: user.created_at
+      };
+    } catch (error) {
+      // Handle cases where no session exists
+      console.log('No active session found:', error);
+      return null;
+    }
   },
 
   // Listen to auth changes

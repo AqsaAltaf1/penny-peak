@@ -281,7 +281,12 @@ function generateId(): string {
 export const demoService = {
   generateDemoData: (): void => {
     const user = userService.getCurrentUser();
-    if (!user) return;
+    if (!user) {
+      console.error('No user found for demo data generation');
+      return;
+    }
+
+    console.log('Generating demo data for user:', user);
 
     // Clear existing data
     storage.set(STORAGE_KEYS.TRANSACTIONS, []);

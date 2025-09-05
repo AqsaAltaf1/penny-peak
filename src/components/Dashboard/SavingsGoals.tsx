@@ -21,10 +21,10 @@ export function SavingsGoals() {
     color: "hsl(var(--primary))",
   });
 
-  const handleAddGoal = (e: React.FormEvent) => {
+  const handleAddGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      addSavingsGoal({
+      await addSavingsGoal({
         title: goalForm.title,
         target: parseFloat(goalForm.target),
         current: parseFloat(goalForm.current) || 0,
@@ -36,15 +36,16 @@ export function SavingsGoals() {
       toast.success("Savings goal added successfully!");
     } catch (error) {
       toast.error("Failed to add savings goal");
+      console.error("Add goal error:", error);
     }
   };
 
-  const handleUpdateGoal = (e: React.FormEvent) => {
+  const handleUpdateGoal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingGoal) return;
     
     try {
-      updateSavingsGoal(editingGoal, {
+      await updateSavingsGoal(editingGoal, {
         title: goalForm.title,
         target: parseFloat(goalForm.target),
         current: parseFloat(goalForm.current),
@@ -56,12 +57,18 @@ export function SavingsGoals() {
       toast.success("Savings goal updated successfully!");
     } catch (error) {
       toast.error("Failed to update savings goal");
+      console.error("Update goal error:", error);
     }
   };
 
-  const handleDeleteGoal = (id: string) => {
-    deleteSavingsGoal(id);
-    toast.success("Savings goal deleted successfully!");
+  const handleDeleteGoal = async (id: string) => {
+    try {
+      await deleteSavingsGoal(id);
+      toast.success("Savings goal deleted successfully!");
+    } catch (error) {
+      toast.error("Failed to delete savings goal");
+      console.error("Delete goal error:", error);
+    }
   };
 
   const openEditDialog = (goal: any) => {
@@ -87,13 +94,13 @@ export function SavingsGoals() {
           </div>
           <Dialog open={isAddingGoal} onOpenChange={setIsAddingGoal}>
             <DialogTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                className="neomorph-button border-0 h-8 w-8 p-0"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
+          <Button 
+            variant="ghost" 
+            size="sm"
+            className="neomorph-button border-0 h-8 w-8 p-0"
+          >
+            <Plus className="h-4 w-4" />
+          </Button>
             </DialogTrigger>
             <DialogContent className="neomorph-raised border-0">
               <DialogHeader>
@@ -170,13 +177,13 @@ export function SavingsGoals() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="text-right">
-                    <p className="font-medium text-foreground">
-                      ${goal.current.toLocaleString()}
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      of ${goal.target.toLocaleString()}
-                    </p>
+                <div className="text-right">
+                  <p className="font-medium text-foreground">
+                    ${goal.current.toLocaleString()}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    of ${goal.target.toLocaleString()}
+                  </p>
                   </div>
                   <Button
                     variant="ghost"

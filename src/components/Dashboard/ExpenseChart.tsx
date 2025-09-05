@@ -1,6 +1,8 @@
+import { useState, useEffect } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { analyticsService } from "@/services/dataService";
+import { analyticsService } from "@/services/supabaseService";
+import { useApp } from "@/contexts/AppContext";
 
 const RADIAN = Math.PI / 180;
 const renderCustomizedLabel = ({
@@ -27,8 +29,40 @@ const renderCustomizedLabel = ({
 };
 
 export function ExpenseChart() {
-  const expenseData = analyticsService.getCategoryData('expense');
-  const total = expenseData.reduce((sum, item) => sum + item.value, 0);
+  const { transactions } = useApp();
+  const [expenseData, setExpenseData] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+
+  useEffect(() => {
+    const loadExpenseData = async () => {
+      try {
+        if (transactions.length > 0) {
+          // Check if we're in demo mode
+          const isDemoMode = localStorage.getItem('demo_mode') === 'true';
+          
+          if (isDemoMode) {
+            // Use localStorage analytics service for demo mode
+            const { analyticsService: localAnalyticsService } = await import('@/services/dataService');
+            const data = localAnalyticsService.getCategoryData('expense');
+            setExpenseData(data);
+            setTotal(data.reduce((sum, item) => sum + item.value, 0));
+          } else {
+            // Use Supabase analytics service for authenticated users
+            const data = await analyticsService.getCategoryData('expense');
+            setExpenseData(data);
+            setTotal(data.reduce((sum, item) => sum + item.value, 0));
+          }
+        } else {
+          setExpenseData([]);
+          setTotal(0);
+        }
+      } catch (error) {
+        console.error('Failed to load expense data:', error);
+      }
+    };
+
+    loadExpenseData();
+  }, [transactions]);
 
   return (
     <Card className="neomorph-raised border-0 shadow-none">
