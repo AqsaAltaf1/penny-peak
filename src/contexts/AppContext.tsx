@@ -14,6 +14,7 @@ interface AppContextType extends AppState {
   registerWithOTP: (email: string, name: string, password?: string) => Promise<{ success: boolean; needsConfirmation: boolean; message?: string; }>;
   verifyOTP: (email: string, code: string) => Promise<{ success: boolean; message?: string; }>;
   resendOTP: (email: string) => Promise<{ success: boolean; message?: string; }>;
+  checkEmailExists: (email: string) => Promise<{ exists: boolean; confirmed: boolean; message: string; }>;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'userId' | 'createdAt'>) => Promise<void>;
   updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
@@ -492,6 +493,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     registerWithOTP,
     verifyOTP,
     resendOTP,
+    checkEmailExists: authService.checkEmailExists,
     addTransaction,
     updateTransaction,
     deleteTransaction,

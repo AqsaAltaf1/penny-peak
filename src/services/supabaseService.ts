@@ -246,6 +246,64 @@ export const authService = {
         callback(null);
       }
     });
+  },
+
+  // Check if email exists in Supabase Users table using Postgres function
+  checkEmailExists: async (email: string) => {
+    try {
+      console.log('Checking if email exists using Postgres function:', email);
+      
+      // Use the Postgres function that runs with elevated privileges
+      const { data, error } = await supabase.rpc('check_email_exists', {
+        email_to_check: email
+      });
+
+      if (error) {
+        console.error('Postgres function error:', error);
+        // Fallback to authentication method if function fails
+        console.log('Falling back to authentication method...');
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email: email,
+          password: 'dummy-password-to-check-email-existence'
+        });
+
+        if (authError) {
+          const errorMessage = authError.message.toLowerCase();
+          console.log('Auth fallback error message:', errorMessage);
+          
+          if (errorMessage.includes('invalid login credentials') && authError.status === 400) {
+            console.log('Email exists (auth fallback)');
+            return { exists: true, confirmed: false, message: 'Email exists but not confirmed' };
+          } else {
+            console.log('Email does not exist (auth fallback)');
+            return { exists: false, confirmed: false, message: 'Email does not exist' };
+          }
+        } else {
+          console.log('Unexpected auth success - email exists');
+          return { exists: true, confirmed: true, message: 'Email exists and is confirmed' };
+        }
+      }
+
+      console.log('Postgres function result:', data);
+      
+      // The function returns a JSON object with the result
+      if (data && typeof data === 'object') {
+        return {
+          exists: data.exists,
+          confirmed: data.confirmed,
+          message: data.message
+        };
+      } else {
+        console.log('Unexpected function result format:', data);
+        return { exists: false, confirmed: false, message: 'Error checking email, allowing registration' };
+      }
+
+    } catch (error) {
+      console.error('Error checking email existence:', error);
+      // If all methods fail, assume email doesn't exist to allow registration
+      console.log('All methods failed, allowing registration');
+      return { exists: false, confirmed: false, message: 'Error checking email, allowing registration' };
+    }
   }
 };
 
