@@ -240,14 +240,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Register with OTP (6-digit code) - Creates user with password and sends OTP
   const registerWithOTP = async (email: string, name: string, password?: string) => {
     try {
-      // If password provided, create user account first (for future login capability)
-      if (password) {
-        console.log('Creating user account with password for future login...');
-        // This creates the account but doesn't sign them in yet
-        await authService.signUp(email, name, password);
-      }
-      
-      // Send OTP for immediate verification
+      // Always use OTP-only registration to avoid duplicate emails
+      // The password will be set later after email verification
+      console.log('Creating OTP account...');
       const data = await authService.signUpWithOTP(email, name);
       
       return { 
