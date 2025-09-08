@@ -4,44 +4,46 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useApp } from "@/contexts/AppContext";
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from "@/types";
 import { Plus, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export function QuickAddTransaction() {
+  const { addTransaction } = useApp();
   const [type, setType] = useState<"income" | "expense">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
 
-  const expenseCategories = [
-    "Food & Dining",
-    "Transportation",
-    "Shopping",
-    "Entertainment",
-    "Bills & Utilities",
-    "Healthcare",
-    "Education",
-    "Travel",
-    "Other"
-  ];
-
-  const incomeCategories = [
-    "Salary",
-    "Freelance",
-    "Investment",
-    "Business",
-    "Gift",
-    "Other"
-  ];
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: This will be implemented with Supabase integration
-    console.log({ type, amount, category, description });
-    // Reset form
-    setAmount("");
-    setCategory("");
-    setDescription("");
+    
+    if (!amount || !category) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    try {
+      await addTransaction({
+        type,
+        amount: parseFloat(amount),
+        category,
+        description,
+        date: new Date().toISOString().split('T')[0],
+      });
+
+      // Reset form
+      setAmount("");
+      setCategory("");
+      setDescription("");
+      
+      toast.success(`${type === 'income' ? 'Income' : 'Expense'} added successfully!`);
+    } catch (error) {
+      toast.error("Failed to add transaction");
+      console.error("Transaction error:", error);
+    }
   };
 
   return (
@@ -108,7 +110,7 @@ export function QuickAddTransaction() {
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent className="neomorph-raised border-0">
-                {(type === "income" ? incomeCategories : expenseCategories).map((cat) => (
+                {(type === "income" ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map((cat) => (
                   <SelectItem key={cat} value={cat}>
                     {cat}
                   </SelectItem>

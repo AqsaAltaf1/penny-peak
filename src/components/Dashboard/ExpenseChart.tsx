@@ -1,14 +1,8 @@
+import { useState, useEffect } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const expenseData = [
-  { name: "Food & Dining", value: 890, color: "#ef4444" },
-  { name: "Transportation", value: 450, color: "#f97316" },
-  { name: "Shopping", value: 320, color: "#eab308" },
-  { name: "Entertainment", value: 280, color: "#22c55e" },
-  { name: "Bills & Utilities", value: 650, color: "#3b82f6" },
-  { name: "Other", value: 210, color: "#8b5cf6" },
-];
+import { analyticsService } from "@/services/supabaseService";
+import { useApp } from "@/contexts/AppContext";
 
 const RADIAN = Math.PI / 180;
 const renderCustomizedLabel = ({
@@ -35,7 +29,40 @@ const renderCustomizedLabel = ({
 };
 
 export function ExpenseChart() {
-  const total = expenseData.reduce((sum, item) => sum + item.value, 0);
+  const { transactions } = useApp();
+  const [expenseData, setExpenseData] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+
+  useEffect(() => {
+    const loadExpenseData = async () => {
+      try {
+        if (transactions.length > 0) {
+          // Check if we're in demo mode
+          const isDemoMode = localStorage.getItem('demo_mode') === 'true';
+          
+          if (isDemoMode) {
+            // Use localStorage analytics service for demo mode
+            const { analyticsService: localAnalyticsService } = await import('@/services/dataService');
+            const data = localAnalyticsService.getCategoryData('expense');
+            setExpenseData(data);
+            setTotal(data.reduce((sum, item) => sum + item.value, 0));
+          } else {
+            // Use Supabase analytics service for authenticated users
+            const data = await analyticsService.getCategoryData('expense');
+            setExpenseData(data);
+            setTotal(data.reduce((sum, item) => sum + item.value, 0));
+          }
+        } else {
+          setExpenseData([]);
+          setTotal(0);
+        }
+      } catch (error) {
+        console.error('Failed to load expense data:', error);
+      }
+    };
+
+    loadExpenseData();
+  }, [transactions]);
 
   return (
     <Card className="neomorph-raised border-0 shadow-none">
@@ -48,41 +75,50 @@ export function ExpenseChart() {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={expenseData}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={renderCustomizedLabel}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey="value"
-                stroke="none"
-              >
-                {expenseData.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip 
-                formatter={(value: number) => [`$${value}`, 'Amount']}
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--neomorph-base))',
-                  border: 'none',
-                  borderRadius: '12px',
-                  boxShadow: 'var(--shadow-raised)'
-                }}
-              />
-              <Legend 
-                verticalAlign="bottom" 
-                height={36}
-                formatter={(value) => <span className="text-sm">{value}</span>}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        {expenseData.length > 0 ? (
+          <div className="h-64 sm:h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={expenseData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={renderCustomizedLabel}
+                  outerRadius={100}
+                  fill="#8884d8"
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {expenseData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  formatter={(value: number) => [`$${value.toFixed(2)}`, 'Amount']}
+                  contentStyle={{
+                    backgroundColor: 'hsl(var(--neomorph-base))',
+                    border: 'none',
+                    borderRadius: '12px',
+                    boxShadow: 'var(--shadow-raised)'
+                  }}
+                />
+                <Legend 
+                  verticalAlign="bottom" 
+                  height={36}
+                  formatter={(value) => <span className="text-sm">{value}</span>}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="h-64 sm:h-80 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <p className="text-muted-foreground">No expense data available</p>
+              <p className="text-sm text-muted-foreground">Add some transactions to see the breakdown</p>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
