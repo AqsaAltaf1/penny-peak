@@ -207,6 +207,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const register = async (email: string, name: string, password: string) => {
     try {
+      // First check if email already exists
+      console.log('Checking email status before registration...');
+      const emailCheck = await authService.checkEmailExists(email);
+      console.log('Email check result:', emailCheck);
+      
+      if (emailCheck.exists) {
+        if (emailCheck.confirmed) {
+          // User exists and is confirmed - they should login instead
+          throw new Error('An account with this email already exists and is confirmed. Please try logging in instead.');
+        } else {
+          // User exists but not confirmed - they should use OTP registration instead
+          throw new Error('An account with this email already exists but is not confirmed. Please use the "Register with Code" option to complete your registration.');
+        }
+      }
+      
+      // Email doesn't exist - create new user
+      console.log('Email does not exist, creating new user...');
       const data = await authService.signUp(email, password, name);
       
       // Check if user needs to confirm email
@@ -241,9 +258,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Register with OTP (6-digit code) - Creates user with password and sends OTP
   const registerWithOTP = async (email: string, name: string, password?: string) => {
     try {
-      // Always use OTP-only registration to avoid duplicate emails
-      // The password will be set later after email verification
-      console.log('Creating OTP account...');
+      // First check if email already exists
+      console.log('Checking email status before OTP registration...');
+      const emailCheck = await authService.checkEmailExists(email);
+      console.log('Email check result:', emailCheck);
+      
+      if (emailCheck.exists) {
+        if (emailCheck.confirmed) {
+          // User exists and is confirmed - they should login instead
+          throw new Error('An account with this email already exists and is confirmed. Please try logging in instead.');
+        } else {
+          // User exists but not confirmed - send OTP for verification
+          console.log('User exists but not confirmed, sending OTP for verification...');
+          try {
+            await authService.resendOTP(email);
+            return {
+              success: true,
+              needsConfirmation: true,
+              message: 'Please check your email for a 6-digit verification code to complete your registration.'
+            };
+          } catch (otpError) {
+            console.error('Failed to resend OTP:', otpError);
+            throw new Error('Unable to send verification code. Please try again or contact support.');
+          }
+        }
+      }
+      
+      // Email doesn't exist - create new user with OTP
+      console.log('Email does not exist, creating new OTP account...');
       const data = await authService.signUpWithOTP(email, name);
       
       return { 

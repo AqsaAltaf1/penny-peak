@@ -148,27 +148,7 @@ export function AuthPage() {
     }
 
     try {
-      // Check if email already exists before attempting registration
-      console.log('Checking if email exists before registration...');
-      const emailCheck = await checkEmailExists(registerForm.email);
-      console.log('Email check result:', emailCheck);
-      
-      if (emailCheck.exists) {
-        if (emailCheck.confirmed) {
-          setError("An account with this email already exists. Please try logging in instead.");
-          // Clear the email field
-          setRegisterForm(prev => ({ ...prev, email: '' }));
-        } else {
-          setError("An account with this email exists but is not confirmed. Please check your email for the verification link or try logging in.");
-          // Clear the email field
-          setRegisterForm(prev => ({ ...prev, email: '' }));
-        }
-        setIsLoading(false);
-        return;
-      }
-      
-      // Email doesn't exist, proceed with registration
-      console.log('Email does not exist, proceeding with registration...');
+      // The register function now handles email checking internally
       const result = await register(registerForm.email, registerForm.name, registerForm.password);
       if (result.success) {
         if (result.needsConfirmation) {
@@ -247,27 +227,7 @@ export function AuthPage() {
     }
 
     try {
-      // Check if email already exists before attempting OTP registration
-      console.log('Checking if email exists before OTP registration...');
-      const emailCheck = await checkEmailExists(registerForm.email);
-      console.log('Email check result:', emailCheck);
-      
-      if (emailCheck.exists) {
-        if (emailCheck.confirmed) {
-          setError("An account with this email already exists. Please try logging in instead.");
-          // Clear the email field
-          setRegisterForm(prev => ({ ...prev, email: '' }));
-        } else {
-          setError("An account with this email exists but is not confirmed. Please check your email for the verification code or try logging in.");
-          // Clear the email field
-          setRegisterForm(prev => ({ ...prev, email: '' }));
-        }
-        setIsLoading(false);
-        return;
-      }
-      
-      // Email doesn't exist, proceed with OTP registration
-      console.log('Email does not exist, proceeding with OTP registration...');
+      // The registerWithOTP function now handles email checking internally
       const result = await registerWithOTP(registerForm.email, registerForm.name, registerForm.password);
       
       if (result.success && result.needsConfirmation) {
