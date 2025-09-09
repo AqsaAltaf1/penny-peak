@@ -61,40 +61,37 @@ export const authService = {
     }
   },
 
-  // Sign up with OTP (sends ONLY verification code via email, no password required)
-  signUpWithOTP: async (email: string, fullName: string) => {
+  // Sign up with OTP (sends ONLY verification code via email, password required)
+  signUpWithOTP: async (email: string, fullName: string, password?: string) => {
     try {
-      // Method 1: Try magic link OTP (should send 6-digit code)
-      const { data, error } = await supabase.auth.signInWithOtp({
+      console.log('OTP Registration - Email:', email, 'Password provided:', !!password);
+      
+      // Always use the provided password - don't rely on magic link OTP for password setting
+      if (!password) {
+        throw new Error('Password is required for OTP registration');
+      }
+      
+      // Create user with password and let Supabase handle the OTP automatically
+      console.log('Creating user with password and OTP...');
+      const { data: signupData, error: signupError } = await supabase.auth.signUp({
         email,
+        password: password, // Always use the provided password
         options: {
           data: {
             full_name: fullName,
           },
-          // No emailRedirectTo - we only want the OTP code, not a link
+          // Let Supabase handle OTP automatically - don't send separate OTP
         }
       });
 
-      if (error) {
-        console.error('Magic link OTP failed, trying alternative method:', error);
-        
-        // Method 2: Fallback - create user first, then send OTP
-        const { data: signupData, error: signupError } = await supabase.auth.signUp({
-          email,
-          password: Math.random().toString(36).slice(-12), // Random temp password
-          options: {
-            data: {
-              full_name: fullName,
-            },
-            emailRedirectTo: undefined, // No redirect
-          }
-        });
-
-        if (signupError) throw signupError;
-        return signupData;
+      if (signupError) {
+        console.error('User creation failed:', signupError);
+        throw signupError;
       }
 
-      return data;
+      console.log('User created successfully with OTP sent automatically');
+      return signupData;
+      
     } catch (err) {
       console.error('OTP signup failed:', err);
       throw err;
@@ -291,6 +288,8 @@ export const authService = {
         return {
           exists: data.exists,
           confirmed: data.confirmed,
+          user_id: data.user_id,
+          email: data.email,
           message: data.message
         };
       } else {
@@ -303,6 +302,320 @@ export const authService = {
       // If all methods fail, assume email doesn't exist to allow registration
       console.log('All methods failed, allowing registration');
       return { exists: false, confirmed: false, message: 'Error checking email, allowing registration' };
+    }
+  },
+
+  // Send password reset email
+  resetPassword: async (email: string, retryCount = 0) => {
+    try {
+      const currentOrigin = window.location.origin;
+      const redirectUrl = `${currentOrigin}/auth/reset-password`;
+      console.log('Password reset redirect URL:', redirectUrl);
+      
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
+
+      if (error) throw error;
+      return data;
+      
+    } catch (error) {
+      console.error('Password reset error:', error);
+      
+      // Handle rate limiting with exponential backoff
+      if ((error.message.includes('rate limit') || error.status === 429) && retryCount < 3) {
+        const delay = Math.pow(2, retryCount) * 1000; // 1s, 2s, 4s
+        console.log(`Rate limited, retrying password reset in ${delay}ms (attempt ${retryCount + 1}/3)`);
+        
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return authService.resetPassword(email, retryCount + 1);
+      }
+      
+      // Provide user-friendly error messages
+      if (error.message.includes('rate limit') || error.status === 429) {
+        throw new Error('Too many password reset attempts. Please wait a few minutes before trying again.');
+      } else if (error.message.includes('email service') || error.message.includes('Error sending')) {
+        throw new Error('Email service is not configured properly. Please contact support for assistance.');
+      } else if (error.status === 500) {
+        throw new Error('Server configuration error. Please contact support for assistance.');
+      }
+      
+      throw error;
+    }
+  },
+
+  // Update password (for authenticated users)
+  updatePassword: async (newPassword: string) => {
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+      return data;
+      
+    } catch (error) {
+      console.error('Password update error:', error);
+      
+      // Provide user-friendly error messages
+      if (error.message.includes('rate limit') || error.status === 429) {
+        throw new Error('Too many password update attempts. Please wait a few minutes before trying again.');
+      } else if (error.message.includes('Password should be at least')) {
+        throw new Error('Password must be at least 6 characters long.');
+      }
+      
+      throw error;
+    }
+  },
+
+  // Get user details for debugging
+  getUserDetails: async (email: string) => {
+    try {
+      console.log('Getting user details for:', email);
+      
+      // First, get the user ID from our existing checkEmailExists function
+      const emailCheck = await authService.checkEmailExists(email);
+      
+      if (!emailCheck.exists) {
+        return { success: false, error: 'User not found' };
+      }
+      
+      // Extract user ID from the email check result
+      const userId = emailCheck.user_id;
+      
+      if (!userId) {
+        return { success: false, error: 'User ID not found' };
+      }
+      
+      // Try to get user details using the user ID
+      try {
+        const { data, error } = await supabase.auth.admin.getUserById(userId);
+        
+        if (error) {
+          console.error('Error getting user details:', error);
+          // If admin access is denied, return basic info we have
+          return { 
+            success: true, 
+            user: {
+              id: userId,
+              email: emailCheck.email,
+              emailConfirmed: emailCheck.confirmed,
+              message: 'Admin access denied, showing basic info only'
+            }
+          };
+        }
+        
+        if (data.user) {
+          console.log('User details:', {
+            id: data.user.id,
+            email: data.user.email,
+            email_confirmed_at: data.user.email_confirmed_at,
+            created_at: data.user.created_at,
+            last_sign_in_at: data.user.last_sign_in_at,
+            app_metadata: data.user.app_metadata,
+            user_metadata: data.user.user_metadata
+          });
+          
+          return {
+            success: true,
+            user: {
+              id: data.user.id,
+              email: data.user.email,
+              emailConfirmed: !!data.user.email_confirmed_at,
+              createdAt: data.user.created_at,
+              lastSignIn: data.user.last_sign_in_at,
+              appMetadata: data.user.app_metadata,
+              userMetadata: data.user.user_metadata
+            }
+          };
+        } else {
+          return { success: false, error: 'User not found' };
+        }
+      } catch (adminError) {
+        console.log('Admin access denied, returning basic info');
+        return { 
+          success: true, 
+          user: {
+            id: userId,
+            email: emailCheck.email,
+            emailConfirmed: emailCheck.confirmed,
+            message: 'Admin access denied, showing basic info only'
+          }
+        };
+      }
+      
+    } catch (error) {
+      console.error('Error in getUserDetails:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  // Simple password reset function
+  sendPasswordReset: async (email: string) => {
+    try {
+      console.log('Sending password reset for:', email);
+      
+      const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`
+      });
+
+      if (error) {
+        console.error('Password reset error:', error);
+        throw error;
+      }
+      
+      console.log('Password reset email sent successfully');
+      return { success: true, data };
+      
+    } catch (error) {
+      console.error('Error sending password reset:', error);
+      throw error;
+    }
+  },
+
+  // Alternative: Try to sign in with common passwords to help user remember
+  tryCommonPasswords: async (email: string) => {
+    const commonPasswords = [
+      'password',
+      '123456',
+      'password123',
+      '123456789',
+      'qwerty',
+      'abc123',
+      'password1',
+      'admin',
+      'letmein',
+      'welcome'
+    ];
+
+    console.log('Trying common passwords for:', email);
+    
+    for (const password of commonPasswords) {
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: email,
+          password: password
+        });
+        
+        if (!error && data.user) {
+          console.log('Found working password:', password);
+          return { success: true, password: password, message: `Found working password: ${password}` };
+        }
+      } catch (err) {
+        // Continue to next password
+        continue;
+      }
+    }
+    
+    return { success: false, message: 'No common passwords worked' };
+  },
+
+  // Test if a specific password works for a user
+  testPassword: async (email: string, password: string) => {
+    try {
+      console.log('Testing password for:', email);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password
+      });
+      
+      if (!error && data.user) {
+        console.log('Password test successful');
+        return { success: true, message: 'Password is correct!' };
+      } else {
+        console.log('Password test failed:', error?.message);
+        return { success: false, message: error?.message || 'Password is incorrect' };
+      }
+    } catch (err) {
+      console.error('Password test error:', err);
+      return { success: false, message: 'Password test failed' };
+    }
+  },
+
+  // Send OTP for password reset
+  sendPasswordResetOTP: async (email: string) => {
+    try {
+      console.log('Sending password reset OTP for:', email);
+      
+      const { data, error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false, // Don't create user if doesn't exist
+        }
+      });
+
+      if (error) {
+        console.error('Password reset OTP error:', error);
+        return { data: null, error };
+      }
+      
+      console.log('Password reset OTP sent successfully');
+      return { data, error: null };
+      
+    } catch (error) {
+      console.error('Error sending password reset OTP:', error);
+      return { data: null, error };
+    }
+  },
+
+  // Verify OTP for password reset
+  verifyPasswordResetOTP: async (email: string, token: string) => {
+    try {
+      console.log('Verifying password reset OTP for:', email);
+      
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'recovery'
+      });
+
+      if (error) {
+        console.error('Password reset OTP verification error:', error);
+        return { success: false, message: error.message };
+      }
+      
+      console.log('Password reset OTP verified successfully');
+      return { success: true, message: 'OTP verified successfully' };
+      
+    } catch (error) {
+      console.error('Error verifying password reset OTP:', error);
+      return { success: false, message: 'OTP verification failed' };
+    }
+  },
+
+  // Set new password with OTP verification
+  setNewPasswordWithOTP: async (email: string, token: string, newPassword: string) => {
+    try {
+      console.log('Setting new password with OTP for:', email);
+      
+      // First verify the OTP
+      const { data, error } = await supabase.auth.verifyOtp({
+        email,
+        token,
+        type: 'recovery'
+      });
+
+      if (error) {
+        console.error('OTP verification failed:', error);
+        return { success: false, message: 'Invalid or expired verification code' };
+      }
+
+      // Now update the password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (updateError) {
+        console.error('Password update failed:', updateError);
+        return { success: false, message: updateError.message };
+      }
+      
+      console.log('Password updated successfully');
+      return { success: true, message: 'Password updated successfully' };
+      
+    } catch (error) {
+      console.error('Error setting new password:', error);
+      return { success: false, message: 'Failed to update password' };
     }
   }
 };

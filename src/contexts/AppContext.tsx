@@ -8,13 +8,18 @@ import {
 } from '@/services/supabaseService';
 
 interface AppContextType extends AppState {
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
   register: (email: string, name: string, password: string) => Promise<{ success: boolean; needsConfirmation: boolean; message?: string; }>;
   registerWithOTP: (email: string, name: string, password?: string) => Promise<{ success: boolean; needsConfirmation: boolean; message?: string; }>;
   verifyOTP: (email: string, code: string) => Promise<{ success: boolean; message?: string; }>;
   resendOTP: (email: string) => Promise<{ success: boolean; message?: string; }>;
-  checkEmailExists: (email: string) => Promise<{ exists: boolean; confirmed: boolean; message: string; }>;
+  checkEmailExists: (email: string) => Promise<{ exists: boolean; confirmed: boolean; user_id?: string; email?: string; message: string; }>;
+  resetPassword: (email: string) => Promise<{ success: boolean; message?: string; }>;
+  debugUserStatus: (email: string) => Promise<{ exists: boolean; confirmed: boolean; message: string; }>;
+  getUserDetails: (email: string) => Promise<{ success: boolean; user?: any; error?: string; }>;
+  tryCommonPasswords: (email: string) => Promise<{ success: boolean; password?: string; message: string; }>;
+  testPassword: (email: string, password: string) => Promise<{ success: boolean; message: string; }>;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'userId' | 'createdAt'>) => Promise<void>;
   updateTransaction: (id: string, updates: Partial<Transaction>) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
@@ -187,13 +192,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      await authService.signIn(email, password);
-      return true;
-    } catch (error) {
-      console.error('Login failed:', error);
-      return false;
+      console.log('Attempting login with:', { email, passwordLength: password.length });
+      const result = await authService.signIn(email, password);
+      console.log('Login successful:', result);
+      return { success: true };
+    } catch (error: any) {
+      console.error('Login failed with error:', error);
+      console.error('Error message:', error.message);
+      console.error('Error status:', error.status);
+      
+      // Provide more specific error messages
+      let errorMessage = error.message || 'Login failed';
+      
+      if (error.message?.includes('Invalid login credentials')) {
+        errorMessage = 'Invalid email or password. Please check your credentials.';
+      } else if (error.message?.includes('Email not confirmed')) {
+        errorMessage = 'Please check your email and click the confirmation link before logging in.';
+      } else if (error.message?.includes('User not found')) {
+        errorMessage = 'No account found with this email. Please register first.';
+      } else if (error.message?.includes('rate limit')) {
+        errorMessage = 'Too many login attempts. Please wait a few minutes.';
+      }
+      
+      return { success: false, message: errorMessage };
     }
   };
 
@@ -286,7 +309,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       
       // Email doesn't exist - create new user with OTP
       console.log('Email does not exist, creating new OTP account...');
-      const data = await authService.signUpWithOTP(email, name);
+      const data = await authService.signUpWithOTP(email, name, password);
       
       return { 
         success: true, 
@@ -536,6 +559,59 @@ export function AppProvider({ children }: { children: ReactNode }) {
     verifyOTP,
     resendOTP,
     checkEmailExists: authService.checkEmailExists,
+    resetPassword: async (email: string) => {
+      try {
+        await authService.resetPassword(email);
+        return { success: true, message: 'Password reset email sent successfully' };
+      } catch (error: any) {
+        console.error('Reset password failed:', error);
+        return { success: false, message: error.message || 'Failed to send password reset email' };
+      }
+    },
+    debugUserStatus: async (email: string) => {
+      try {
+        console.log('=== DEBUGGING USER STATUS ===');
+        const emailCheck = await authService.checkEmailExists(email);
+        console.log('Email check result:', emailCheck);
+        return emailCheck;
+      } catch (error) {
+        console.error('Debug error:', error);
+        return { exists: false, confirmed: false, message: 'Error checking user status' };
+      }
+    },
+    getUserDetails: async (email: string) => {
+      try {
+        console.log('=== GETTING USER DETAILS ===');
+        const result = await authService.getUserDetails(email);
+        console.log('User details result:', result);
+        return result;
+      } catch (error: any) {
+        console.error('Get user details error:', error);
+        return { success: false, error: error.message };
+      }
+    },
+    tryCommonPasswords: async (email: string) => {
+      try {
+        console.log('=== TRYING COMMON PASSWORDS ===');
+        const result = await authService.tryCommonPasswords(email);
+        console.log('Common passwords result:', result);
+        return result;
+      } catch (error: any) {
+        console.error('Try common passwords error:', error);
+        return { success: false, message: error.message };
+      }
+    },
+    testPassword: async (email: string, password: string) => {
+      try {
+        console.log('=== TESTING PASSWORD ===');
+        const result = await authService.testPassword(email, password);
+        console.log('Password test result:', result);
+        return result;
+      } catch (error: any) {
+        console.error('Password test error:', error);
+        return { success: false, message: error.message };
+      }
+    },
     addTransaction,
     updateTransaction,
     deleteTransaction,
