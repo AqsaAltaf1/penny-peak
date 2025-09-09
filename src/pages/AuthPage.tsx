@@ -6,17 +6,28 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useApp } from "@/contexts/AppContext";
 import { authService } from "@/services/supabaseService";
 import { LogIn, UserPlus, DollarSign, Mail, Shield, Eye, EyeOff, Check, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 export function AuthPage() {
-  const { login, register, registerWithOTP, checkEmailExists } = useApp();
+  const { login, register, registerWithOTP, resetPassword } = useApp();
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [retryStatus, setRetryStatus] = useState("");
+  
+  // Forgot Password Modal State
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
+  const [isForgotPasswordLoading, setIsForgotPasswordLoading] = useState(false);
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState("");
+  const [forgotPasswordStep, setForgotPasswordStep] = useState<'email' | 'otp' | 'new-password'>('email');
+  const [otpCode, setOtpCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   
   // Password visibility states
   const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -92,11 +103,14 @@ export function AuthPage() {
     }
 
     try {
-      const success = await login(loginForm.email, loginForm.password);
-      if (!success) {
-        setError("Invalid email or password");
+      console.log('Attempting login with email:', loginForm.email);
+      const result = await login(loginForm.email, loginForm.password);
+      console.log('Login result:', result);
+      if (!result.success) {
+        setError(result.message || "Invalid email or password");
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Login error:', error);
       setError(error.message || "Login failed. Please try again.");
     } finally {
       setIsLoading(false);
@@ -248,6 +262,117 @@ export function AuthPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!forgotPasswordEmail.trim()) {
+      setForgotPasswordMessage("Please enter your email address");
+      return;
+    }
+
+    setIsForgotPasswordLoading(true);
+    setForgotPasswordMessage("");
+
+    try {
+      console.log('=== SENDING PASSWORD RESET OTP ===');
+      // Use the authService directly to send OTP for password reset
+      const { data, error } = await authService.sendPasswordResetOTP(forgotPasswordEmail);
+      
+      if (error) {
+        console.error('Password reset OTP error:', error);
+        setForgotPasswordMessage(`❌ ${error.message}`);
+      } else {
+        console.log('Password reset OTP sent successfully');
+        setForgotPasswordMessage("✅ 6-digit verification code sent to your email!");
+        setForgotPasswordStep('otp');
+        toast.success("Verification code sent!");
+      }
+    } catch (error) {
+      console.error('Password reset error:', error);
+      setForgotPasswordMessage(`❌ Failed to send verification code: ${error.message}`);
+    } finally {
+      setIsForgotPasswordLoading(false);
+    }
+  };
+
+  const handleVerifyOTP = async () => {
+    if (!otpCode.trim()) {
+      setForgotPasswordMessage("Please enter the 6-digit code");
+      return;
+    }
+
+    setIsForgotPasswordLoading(true);
+    setForgotPasswordMessage("");
+
+    try {
+      console.log('=== VERIFYING PASSWORD RESET OTP ===');
+      const result = await authService.verifyPasswordResetOTP(forgotPasswordEmail, otpCode);
+      
+      if (result.success) {
+        setForgotPasswordMessage("✅ Code verified! Now set your new password.");
+        setForgotPasswordStep('new-password');
+        toast.success("Code verified!");
+      } else {
+        setForgotPasswordMessage(`❌ ${result.message}`);
+      }
+    } catch (error) {
+      console.error('OTP verification error:', error);
+      setForgotPasswordMessage(`❌ Verification failed: ${error.message}`);
+    } finally {
+      setIsForgotPasswordLoading(false);
+    }
+  };
+
+  const handleSetNewPassword = async () => {
+    if (!newPassword.trim()) {
+      setForgotPasswordMessage("Please enter a new password");
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setForgotPasswordMessage("Passwords do not match");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setForgotPasswordMessage("Password must be at least 6 characters long");
+      return;
+    }
+
+    setIsForgotPasswordLoading(true);
+    setForgotPasswordMessage("");
+
+    try {
+      console.log('=== SETTING NEW PASSWORD ===');
+      const result = await authService.setNewPasswordWithOTP(forgotPasswordEmail, otpCode, newPassword);
+      
+      if (result.success) {
+        setForgotPasswordMessage("✅ Password updated successfully! You can now login with your new password.");
+        toast.success("Password updated successfully!");
+        
+        // Close modal after a short delay
+        setTimeout(() => {
+          setShowForgotPassword(false);
+          resetForgotPasswordModal();
+        }, 2000);
+      } else {
+        setForgotPasswordMessage(`❌ ${result.message}`);
+      }
+    } catch (error) {
+      console.error('Set new password error:', error);
+      setForgotPasswordMessage(`❌ Failed to update password: ${error.message}`);
+    } finally {
+      setIsForgotPasswordLoading(false);
+    }
+  };
+
+  const resetForgotPasswordModal = () => {
+    setForgotPasswordStep('email');
+    setForgotPasswordEmail("");
+    setOtpCode("");
+    setNewPassword("");
+    setConfirmNewPassword("");
+    setForgotPasswordMessage("");
   };
 
   const handleDemoLogin = async () => {
@@ -456,13 +581,32 @@ export function AuthPage() {
                     </Alert>
                   )}
 
-                  <Button 
-                    type="submit" 
-                    className="w-full neomorph-button border-0 gradient-primary text-primary-foreground"
-                    disabled={isLoading || !isLoginFormValid()}
-                  >
-                    {isLoading ? "Signing in..." : "Sign In"}
-                  </Button>
+                  <div className="space-y-3">
+                    <Button 
+                      type="submit" 
+                      className="w-full neomorph-button border-0 gradient-primary text-primary-foreground"
+                      disabled={isLoading || !isLoginFormValid()}
+                    >
+                      {isLoading ? "Signing in..." : "Sign In"}
+                    </Button>
+                    
+                    {/* Forgot Password Link - Bottom Right */}
+                    <div className="text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForgotPasswordEmail(loginForm.email); // Pre-fill with current email if available
+                          setShowForgotPassword(true);
+                          setForgotPasswordMessage("");
+                        }}
+                        className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                        disabled={isLoading}
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
+                  </div>
+                  
                 </form>
               </CardContent>
             </TabsContent>
@@ -692,6 +836,215 @@ export function AuthPage() {
           </p>
         </div>
       </div>
+
+      {/* Forgot Password Modal */}
+      <Dialog open={showForgotPassword} onOpenChange={(open) => {
+        if (!open) {
+          resetForgotPasswordModal();
+        }
+        setShowForgotPassword(open);
+      }}>
+        <DialogContent className="neomorph-raised border-0 shadow-none">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-primary" />
+              {forgotPasswordStep === 'email' && 'Reset Your Password'}
+              {forgotPasswordStep === 'otp' && 'Enter Verification Code'}
+              {forgotPasswordStep === 'new-password' && 'Set New Password'}
+            </DialogTitle>
+            <DialogDescription>
+              {forgotPasswordStep === 'email' && 'Enter your email address and we\'ll send you a 6-digit verification code.'}
+              {forgotPasswordStep === 'otp' && `Enter the 6-digit code sent to ${forgotPasswordEmail}`}
+              {forgotPasswordStep === 'new-password' && 'Enter your new password below.'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Step 1: Email */}
+            {forgotPasswordStep === 'email' && (
+              <div>
+                <Label htmlFor="forgot-email">
+                  Email Address <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  placeholder="Enter your email address"
+                  value={forgotPasswordEmail}
+                  onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                  className="neomorph-inset border-0 focus:ring-2 focus:ring-primary focus:ring-offset-0"
+                  required
+                />
+              </div>
+            )}
+
+            {/* Step 2: OTP */}
+            {forgotPasswordStep === 'otp' && (
+              <div>
+                <Label htmlFor="forgot-otp">
+                  Verification Code <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="forgot-otp"
+                  type="text"
+                  placeholder="Enter 6-digit code"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="neomorph-inset border-0 focus:ring-2 focus:ring-primary focus:ring-offset-0 text-center text-lg tracking-widest"
+                  maxLength={6}
+                  required
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Didn't receive the code? <button 
+                    type="button" 
+                    onClick={handleForgotPassword}
+                    className="text-primary hover:underline"
+                  >
+                    Resend
+                  </button>
+                </p>
+              </div>
+            )}
+
+            {/* Step 3: New Password */}
+            {forgotPasswordStep === 'new-password' && (
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="new-password">
+                    New Password <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="new-password"
+                    type="password"
+                    placeholder="Enter new password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="neomorph-inset border-0 focus:ring-2 focus:ring-primary focus:ring-offset-0"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="confirm-new-password">
+                    Confirm New Password <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="confirm-new-password"
+                    type="password"
+                    placeholder="Confirm new password"
+                    value={confirmNewPassword}
+                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                    className="neomorph-inset border-0 focus:ring-2 focus:ring-primary focus:ring-offset-0"
+                    required
+                  />
+                </div>
+              </div>
+            )}
+
+            {forgotPasswordMessage && (
+              <Alert className="neomorph-inset border-0">
+                <AlertDescription className={forgotPasswordMessage.includes('✅') ? 'text-green-600' : 'text-destructive'}>
+                  {forgotPasswordMessage}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex gap-2">
+              {forgotPasswordStep === 'email' && (
+                <>
+                  <Button
+                    onClick={handleForgotPassword}
+                    disabled={isForgotPasswordLoading || !forgotPasswordEmail.trim()}
+                    className="flex-1 neomorph-button border-0 gradient-primary text-primary-foreground"
+                  >
+                    {isForgotPasswordLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="h-4 w-4 mr-2" />
+                        Send Code
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowForgotPassword(false);
+                      resetForgotPasswordModal();
+                    }}
+                    className="neomorph-button border-0"
+                  >
+                    Cancel
+                  </Button>
+                </>
+              )}
+
+              {forgotPasswordStep === 'otp' && (
+                <>
+                  <Button
+                    onClick={handleVerifyOTP}
+                    disabled={isForgotPasswordLoading || !otpCode.trim()}
+                    className="flex-1 neomorph-button border-0 gradient-primary text-primary-foreground"
+                  >
+                    {isForgotPasswordLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4 mr-2" />
+                        Verify Code
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => setForgotPasswordStep('email')}
+                    className="neomorph-button border-0"
+                  >
+                    Back
+                  </Button>
+                </>
+              )}
+
+              {forgotPasswordStep === 'new-password' && (
+                <>
+                  <Button
+                    onClick={handleSetNewPassword}
+                    disabled={isForgotPasswordLoading || !newPassword.trim() || !confirmNewPassword.trim()}
+                    className="flex-1 neomorph-button border-0 gradient-primary text-primary-foreground"
+                  >
+                    {isForgotPasswordLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <Shield className="h-4 w-4 mr-2" />
+                        Update Password
+                      </>
+                    )}
+                  </Button>
+                  
+                  <Button
+                    variant="outline"
+                    onClick={() => setForgotPasswordStep('otp')}
+                    className="neomorph-button border-0"
+                  >
+                    Back
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
